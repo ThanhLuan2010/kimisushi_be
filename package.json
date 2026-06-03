@@ -1,0 +1,27 @@
+{
+  "name": "kimi-sushi-system",
+  "version": "1.0.0",
+  "description": "Integrated POS and Ordering System for Kimi Sushi",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "prod": "pm2 start ecosystem.config.js",
+    "build:pos": "cd Kimi_Billing_App && npm run build && xcopy /E /I /Y dist ..\\billing",
+    "build:all": "npm run build:pos"
+  },
+  "dependencies": {
+    "canvas": "^3.2.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-validator": "^7.3.2",
+    "mongoose": "^9.4.1",
+    "node-poppler": "^9.1.1",
+    "nodemailer": "^8.0.5",
+    "pdf2pic": "^3.2.0",
+    "pdfjs-dist": "^3.11.174",
+    "socket.io": "^4.7.2",
+    "tesseract.js": "^7.0.0"
+  }
+}

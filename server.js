@@ -15,6 +15,18 @@ const Order = require('./models/Order');
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
+// Ensure DB connection before processing requests on Vercel
+app.use(async (req, res, next) => {
+  if (process.env.VERCEL) {
+    try {
+      await connectDB();
+    } catch (e) {
+      console.error('[MongoDB] Vercel auto-connect failed:', e.message);
+    }
+  }
+  next();
+});
+
 // ==================== SOCKET.IO ====================
 const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] }
@@ -163,22 +175,29 @@ app.get('*', (req, res) => {
 // ==================== START SERVER ====================
 const PORT = process.env.PORT || 3010;
 
-async function start() {
-  await connectDB();
+if (!process.env.VERCEL) {
+  async function start() {
+    await connectDB();
 
-  server.listen(PORT, () => {
-    console.log('');
-    console.log('===========================================');
-    console.log('🍣 Kimi Sushi Server đang chạy!');
-    console.log(`🌐 http://localhost:${PORT}`);
-    console.log(`📊 MongoDB: ${mongoose.connection.readyState === 1 ? '✅ Connected' : '⚠️ Disconnected (offline mode)'}`);
-    console.log('===========================================');
-    console.log('');
-    console.log('[CONFIG] Gmail Settings:');
-    console.log(`  GMAIL_ENABLED: ${process.env.GMAIL_ENABLED === 'true' ? '✅ Bật' : '❌ Tắt'}`);
-    console.log(`  GMAIL_USER: ${process.env.GMAIL_USER || '❌ Chưa cấu hình'}`);
-    console.log(`  GMAIL_APP_PASSWORD: ${process.env.GMAIL_APP_PASSWORD ? '✅ Đã cấu hình' : '❌ Chưa cấu hình'}`);
-  });
+    server.listen(PORT, () => {
+      console.log('');
+      console.log('===========================================');
+      console.log('🍣 Kimi Sushi Server đang chạy!');
+      console.log(`🌐 http://localhost:${PORT}`);
+      console.log(`📊 MongoDB: ${mongoose.connection.readyState === 1 ? '✅ Connected' : '⚠️ Disconnected (offline mode)'}`);
+      console.log('===========================================');
+      console.log('');
+      console.log('[CONFIG] Gmail Settings:');
+      console.log(`  GMAIL_ENABLED: ${process.env.GMAIL_ENABLED === 'true' ? '✅ Bật' : '❌ Tắt'}`);
+      console.log(`  GMAIL_USER: ${process.env.GMAIL_USER || '❌ Chưa cấu hình'}`);
+      console.log(`  GMAIL_APP_PASSWORD: ${process.env.GMAIL_APP_PASSWORD ? '✅ Đã cấu hình' : '❌ Chưa cấu hình'}`);
+    });
+  }
+
+  start();
+} else {
+  // On Vercel, DB connection is handled by the middleware
 }
 
-start();
+// Export the app for Vercel Serverless
+module.exports = app;

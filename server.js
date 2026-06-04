@@ -175,8 +175,22 @@ io.on('connection', (socket) => {
 // ==================== STATIC FILES ====================
 app.use(express.static('.'));
 
+// Root endpoint for easy verification
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: '🍣 Kimi Sushi API is running successfully!',
+    environment: process.env.VERCEL ? 'vercel' : 'local',
+    timestamp: new Date().toISOString()
+  });
+});
+
 app.get('*', (req, res) => {
-  res.sendFile(__dirname + '/index.html');
+  res.sendFile(__dirname + '/index.html', (err) => {
+    if (err) {
+      res.status(404).send('Not Found');
+    }
+  });
 });
 
 // ==================== START SERVER ====================

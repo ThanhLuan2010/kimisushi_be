@@ -20,8 +20,15 @@ app.use(async (req, res, next) => {
   if (process.env.VERCEL) {
     try {
       await connectDB();
+      if (mongoose.connection.readyState !== 1) {
+        return res.status(500).json({ 
+          success: false, 
+          error: 'Lỗi kết nối Database trên Vercel. Hãy kiểm tra biến môi trường MONGODB_URL trong Vercel Settings và đảm bảo Network Access của MongoDB Atlas đã cho phép IP 0.0.0.0/0 (Allow Access from Anywhere).' 
+        });
+      }
     } catch (e) {
       console.error('[MongoDB] Vercel auto-connect failed:', e.message);
+      return res.status(500).json({ success: false, error: 'Database connection failed: ' + e.message });
     }
   }
   next();

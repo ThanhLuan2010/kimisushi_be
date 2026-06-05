@@ -1,11 +1,8 @@
 require('dotenv').config();
 const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
 const cors = require('cors');
 
 const app = express();
-const server = http.createServer(app);
 
 // ==================== DATABASE ====================
 const { connectDB, mongoose } = require('./db');
@@ -34,12 +31,6 @@ app.use(async (req, res, next) => {
   next();
 });
 
-// ==================== SOCKET.IO ====================
-const io = new Server(server, {
-  cors: { origin: "*", methods: ["GET", "POST"] }
-});
-// Attach Socket.IO instance to app so routers/controllers can access it
-app.set('io', io);
 
 // ==================== ROUTERS ====================
 const authRouter = require('./routes/auth');
@@ -53,7 +44,7 @@ const faqRouter = require('./routes/faq');
 const analyticsRouter = require('./routes/analytics');
 const telegramRouter = require('./routes/telegram');
 const mailRouter = require('./routes/mail');
-
+const fcmRouter = require('./routes/fcm');
 // Health endpoint
 app.get('/api/health', async (req, res) => {
   res.json({
@@ -78,6 +69,7 @@ app.use('/api/tables', tableRouter);
 app.use('/api/inbox', inboxRouter);
 app.use('/api/faq', faqRouter);
 app.use('/api/analytics', analyticsRouter);
+app.use('/api/fcm', fcmRouter);
 app.use('/api', telegramRouter);
 app.use('/api', mailRouter);
 
@@ -100,77 +92,6 @@ app.get('/robots.txt', (req, res) => {
   res.type('text').send(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /admin\nSitemap: ${baseUrl}/sitemap.xml\n`);
 });
 
-// ==================== SOCKET.IO HANDLERS ====================
-const { buildOrderInlineKeyboard, sendTelegramMessage } = require('./helpers/telegram');
-
-io.on('connection', (socket) => {
-  console.log('[SOCKET] Client connected:', socket.id);
-
-  socket.on('submit_order', async (order) => {
-    console.log('[SOCKET] New order received:', order.id);
-
-    order.id = order.id || 'order_' + Date.now();
-    order.createdAt = new Date();
-    order.updatedAt = new Date();
-    
-    // Save to MongoDB if connected (fails silently if DB not connected)
-    try {
-      await Order.findOneAndUpdate({ id: order.id }, { $set: order }, { upsert: true, new: true });
-    } catch (e) {
-      console.warn('[SOCKET] Failed to save order to MongoDB:', e.message);
-    }
-
-    io.emit('admin_new_order', order);
-
-    const customerName = order.customerName || order.name || '-';
-    const phone = order.customerPhone || order.phone || '-';
-    const email = order.customerEmail || order.email || '-';
-    const orderId = order.id || '-';
-    const pickupDate = order.pickupDate || '-';
-    const pickupTime = order.pickupTime || order.pickupTimeDisplay || '-';
-    const pickupDisplay = pickupTime === 'asap' ? 'So schnell wie möglich' : pickupTime;
-    const method = order.method === 'delivery' ? '🚴 Lieferung' : '🏪 Abholung';
-    const address = order.address && order.address !== 'Abholung / Vor Ort' ? order.address : null;
-    const notes = (order.notes || '').trim();
-    const total = order.total ? `${order.total.replace('.', ',')} €` : '-';
-    const itemCount = order.itemCount || '-';
-    const itemsSource = order.items || order.cart || [];
-    
-    let itemsDetail = '';
-    if (itemsSource.length > 0) {
-      itemsSource.forEach(i => {
-        const qty = parseInt(i.quantity) || 1;
-        const price = i.price ? ` — ${i.price}` : '';
-        itemsDetail += `\n  ▸ ${i.name || '-'} x${qty}${price}`;
-      });
-    } else {
-      itemsDetail = '\n  (keine Details)';
-    }
-    const formattedDate = pickupDate !== '-' ? pickupDate.split('-').reverse().join('.') : '-';
-
-    const telegramMsg = `🍣 NEUE BESTELLUNG\n\n━━━━━━━━━━━━━━━\n📋 BESTELL-NR.: ${orderId}\n━━━━━━━━━━━━━━━\n👤 Kunde: ${customerName}\n📞 Telefon: ${phone}\n📧 E-Mail: ${email}\n━━━━━━━━━━━━━━━\n🏪 Bestellart: ${method}\n${address ? `📍 Adresse: ${address}\n` : ''}━━━━━━━━━━━━━━━\n🗓 Datum: ${formattedDate}\n🕒 Abholzeit: ${pickupDisplay}\n━━━━━━━━━━━━━━━\n${notes ? `⚠️ ALLERGIEN / WÜNSCHE:\n  ${notes}\n━━━━━━━━━━━━━━━\n` : ''}📋 Bestellte Artikel:${itemsDetail}\n━━━━━━━━━━━━━━━\n🛒 Anzahl: ${itemCount} Gerichte\n━━━━━━━━━━━━━━━\n💰 Gesamtbetrag: ${total}\n━━━━━━━━━━━━━━━\nStatus: NEU`;
-
-    sendTelegramMessage(telegramMsg, buildOrderInlineKeyboard(orderId));
-  });
-
-  socket.on('submit_reservation', async (resv) => {
-    console.log('[SOCKET] New reservation received:', resv.name);
-    resv.id = resv.id || 'res_' + Date.now();
-    resv.createdAt = new Date();
-    
-    try {
-      await Order.findOneAndUpdate({ id: resv.id }, { $set: resv }, { upsert: true, new: true });
-    } catch (e) {
-      console.warn('[SOCKET] Failed to save reservation to MongoDB:', e.message);
-    }
-    
-    io.emit('admin_new_reservation', resv);
-  });
-
-  socket.on('disconnect', () => {
-    console.log('[SOCKET] Client disconnected:', socket.id);
-  });
-});
 
 // ==================== STATIC FILES ====================
 app.use(express.static('.'));
@@ -200,7 +121,7 @@ if (!process.env.VERCEL) {
   async function start() {
     await connectDB();
 
-    server.listen(PORT, () => {
+    app.listen(PORT, () => {
       console.log('');
       console.log('===========================================');
       console.log('🍣 Kimi Sushi Server đang chạy!');

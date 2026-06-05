@@ -16,6 +16,7 @@
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "express-validator": "^7.3.2",
+    "firebase-admin": "^13.10.0",
     "mongoose": "^9.4.1",
     "node-poppler": "^9.1.1",
     "nodemailer": "^8.0.5",

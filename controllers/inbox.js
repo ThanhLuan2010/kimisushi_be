@@ -3,6 +3,8 @@ const Settings = require('../models/Settings');
 const { resolveAsapPickup } = require('../helpers/dateUtils');
 const { sendGmailNotification } = require('../helpers/mail');
 const { buildOrderInlineKeyboard, sendTelegramMessage } = require('../helpers/telegram');
+const FcmToken = require('../models/FcmToken');
+const { sendPushNotification } = require('../helpers/firebase');
 
 async function getSettingsObj() {
   try {
@@ -61,17 +63,13 @@ async function updateInboxStatus(req, res) {
     );
     if (!order) return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
 
-    const io = req.app.get('io');
     if (status === 'confirmed' && tableId) {
       const Table = require('../models/Table');
       await Table.findOneAndUpdate(
         { id: tableId },
         { $set: { status: 'reserved', reservedFor: order.customerName || order.name, reservedTime: order.time, updatedAt: new Date() } }
       );
-      if (io) io.emit('table_updated', { id: tableId });
     }
-
-    if (io) io.emit('order_status_updated', { id, status, tableId });
 
     res.json({ success: true, order });
   } catch (e) {
@@ -168,10 +166,16 @@ async function createInboxItem(req, res) {
     const replyMarkup = isReservation ? undefined : buildOrderInlineKeyboard(item.id);
     sendTelegramMessage(telegramMsg, replyMarkup);
 
-    // Broadcast via Socket.IO using express app.get('io')
-    const io = req.app.get('io');
-    if (io) {
-      io.emit(item.type === 'reservation' ? 'new_reservation' : 'new_order', item);
+    // Send Firebase Push Notification
+    const tokensDoc = await FcmToken.find({}, 'token');
+    if (tokensDoc.length > 0) {
+      const tokens = tokensDoc.map(t => t.token);
+      if (isReservation) {
+        await sendPushNotification(tokens, '📅 Neue Reservierung!', `Tischreservierung von ${customerName || '-'}`);
+      } else {
+        const total = item.total ? `${item.total.replace('.', ',')} €` : '-';
+        await sendPushNotification(tokens, '🍣 Neue Bestellung!', `Bestellung #${item.id || '-'} von ${customerName || '-'} (${total})`);
+      }
     }
 
     res.json({ success: true, id: item.id });

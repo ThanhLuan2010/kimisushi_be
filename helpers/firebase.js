@@ -49,6 +49,20 @@ async function sendPushNotification(tokens, title, body, data = {}) {
     const message = {
       notification: { title, body },
       data: { ...data, click_action: 'FLUTTER_NOTIFICATION_CLICK' },
+      android: {
+        priority: 'high',
+        notification: {
+          channelId: 'default',
+          sound: 'default'
+        }
+      },
+      apns: {
+        payload: {
+          aps: {
+            sound: 'default'
+          }
+        }
+      },
       tokens: fcmTokens
     };
     try {
@@ -71,6 +85,8 @@ async function sendPushNotification(tokens, title, body, data = {}) {
     const expoMessages = expoTokens.map(token => ({
       to: token,
       sound: 'default',
+      priority: 'high',
+      channelId: 'default',
       title,
       body,
       data

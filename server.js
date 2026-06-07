@@ -45,6 +45,7 @@ const analyticsRouter = require('./routes/analytics');
 const telegramRouter = require('./routes/telegram');
 const mailRouter = require('./routes/mail');
 const fcmRouter = require('./routes/fcm');
+const categoryRouter = require('./routes/category');
 // Health endpoint
 app.get('/api/health', async (req, res) => {
   res.json({
@@ -65,6 +66,7 @@ app.use('/api/admin/settings', settingsRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/menu', menuRouter);
 app.use('/api/combos', comboRouter);
+app.use('/api/categories', categoryRouter);
 app.use('/api/tables', tableRouter);
 app.use('/api/inbox', inboxRouter);
 app.use('/api/faq', faqRouter);

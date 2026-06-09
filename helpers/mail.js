@@ -201,7 +201,218 @@ async function sendGmailNotification(orderData, gmailConfig) {
   }
 }
 
+async function sendCustomerStatusEmail(orderData, oldStatus, newStatus, gmailConfig) {
+  const gmailUser = gmailConfig?.gmailUser || process.env.GMAIL_USER;
+  const gmailEnabled = gmailConfig?.gmailEnabled || process.env.GMAIL_ENABLED === 'true';
+  const gmailPassword = gmailConfig?.gmailPassword || process.env.GMAIL_APP_PASSWORD;
+
+  const customerEmail = orderData.customerEmail || orderData.email;
+
+  if (!gmailEnabled || !gmailUser || !gmailPassword) {
+    console.log('[GMAIL-CUSTOMER] Gmail not configured, skipping status update email.');
+    return { success: false, reason: 'Gmail not configured' };
+  }
+
+  if (!customerEmail || !customerEmail.includes('@')) {
+    console.log(`[GMAIL-CUSTOMER] Customer email invalid or missing for ${orderData.id}, skipping email.`);
+    return { success: false, reason: 'No customer email' };
+  }
+
+  const isReservation = orderData.orderType === 'reservation' || orderData.type === 'reservation';
+  const items = orderData.items || orderData.cart || [];
+  const customerName = orderData.customerName || orderData.name || 'Sehr geehrter Kunde';
+  const customerPhone = orderData.customerPhone || orderData.phone || '-';
+  const pickupDateRaw = orderData.pickupDate || orderData.date || '-';
+  const pickupTimeRaw = orderData.pickupTime || orderData.time || '-';
+  const pickupTimeDisplay = pickupTimeRaw === 'asap'
+    ? 'So schnell wie möglich (ASAP)'
+    : (pickupTimeRaw !== '-' ? `${pickupTimeRaw} Uhr` : '-');
+  const deliveryFee = orderData.deliveryFee || '0';
+  const address = orderData.address || '-';
+  const method = orderData.method || '-';
+  const notes = orderData.notes || orderData.remark || '-';
+  const itemId = orderData.id || orderData.orderId || '-';
+  const itemCount = orderData.itemCount || (orderData.guests ? `${orderData.guests} Personen` : '-');
+
+  const normalizePrice = (p) => {
+    if (typeof p === 'number') return p;
+    if (!p) return 0;
+    const cleaned = String(p).replace('€', '').replace(/\s/g, '').replace(',', '.');
+    return parseFloat(cleaned) || 0;
+  };
+
+  const fmt = (n) => n.toFixed(2).replace('.', ',') + ' €';
+
+  // Customize subject and body based on status transition
+  let subject = '';
+  let statusHeader = '';
+  let statusMessage = '';
+  let statusColor = '#8B0000'; // Default dark red
+
+  const fmtDate = pickupDateRaw !== '-' ? pickupDateRaw.split('-').reverse().join('.') : '-';
+
+  if (isReservation) {
+    statusColor = '#22c55e'; // Green
+    if (newStatus === 'confirmed') {
+      subject = `📅 Bestätigung: Ihre Tischreservierung bei Kimi Sushi`;
+      statusHeader = `Ihre Tischreservierung wurde bestätigt`;
+      statusMessage = `Hallo ${customerName},<br/><br/>wir freuen uns, Ihre Tischreservierung für <strong>${itemCount}</strong> am <strong>${fmtDate}</strong> um <strong>${pickupTimeDisplay}</strong> zu bestätigen.${orderData.tableId ? `<br/>Zugewiesener Tisch: <strong>Tisch #${orderData.tableId.replace('t', '')}</strong>.` : ''}<br/><br/>Wir freuen uns auf Ihren Besuch!`;
+    } else if (newStatus === 'cancelled') {
+      statusColor = '#ef4444'; // Red
+      subject = `❌ Stornierung: Ihre Tischreservierung bei Kimi Sushi`;
+      statusHeader = `Ihre Tischreservierung wurde storniert`;
+      statusMessage = `Hallo ${customerName},<br/><br/>leider müssen wir Ihnen mitteilen, dass Ihre Tischreservierung für den <strong>${fmtDate}</strong> um <strong>${pickupTimeDisplay}</strong> storniert wurde. Bitte kontaktieren Sie uns bei Fragen telefonisch oder per E-Mail.`;
+    } else if (newStatus === 'arrived') {
+      subject = `✅ Willkommen bei Kimi Sushi`;
+      statusHeader = `Herzlich Willkommen!`;
+      statusMessage = `Hallo ${customerName},<br/><br/>vielen Dank für Ihren Besuch! Wir hoffen, Sie genießen Ihren Aufenthalt bei Kimi Sushi. Guten Appetit!`;
+    } else {
+      subject = `📅 Update zu Ihrer Reservierung bei Kimi Sushi`;
+      statusHeader = `Status Ihrer Reservierung wurde aktualisiert`;
+      statusMessage = `Hallo ${customerName},<br/><br/>der Status Ihrer Reservierung am <strong>${fmtDate}</strong> um <strong>${pickupTimeDisplay}</strong> wurde auf <strong>${newStatus}</strong> geändert.`;
+    }
+  } else {
+    // Orders
+    if (newStatus === 'cooking' || newStatus === 'confirmed') {
+      subject = `🍣 Kimi Sushi: Ihre Bestellung wird vorbereitet!`;
+      statusHeader = `Ihre Bestellung wird vorbereitet`;
+      statusMessage = `Hallo ${customerName},<br/><br/>wir haben Ihre Bestellung <strong>#${itemId}</strong> erhalten und bereiten Ihre Gerichte jetzt frisch zu!<br/><br/><strong>Bereitstellungszeit:</strong> ${pickupTimeDisplay}.${orderData.estimatedMinutes ? `<br/><strong>Dự kiến:</strong> trong khoảng ${orderData.estimatedMinutes} Minuten.` : ''}`;
+    } else if (newStatus === 'done') {
+      statusColor = '#10b981'; // Success Green
+      subject = `🍣 Kimi Sushi: Ihre Bestellung ist fertig!`;
+      statusHeader = `Ihre Bestellung ist fertiggestellt`;
+      if (method === 'delivery') {
+        statusMessage = `Hallo ${customerName},<br/><br/>Gute Nachrichten! Ihre Bestellung <strong>#${itemId}</strong> wurde frisch zubereitet und befindet sich jetzt auf dem Weg zu Ihnen unter der Adresse: <strong>${address}</strong>.`;
+      } else {
+        statusMessage = `Hallo ${customerName},<br/><br/>Ihre Bestellung <strong>#${itemId}</strong> steht zur Abholung bereit! Sie können Ihre Speisen ab sofort bei uns abholen.`;
+      }
+    } else if (newStatus === 'cancelled') {
+      statusColor = '#ef4444'; // Cancelled Red
+      subject = `❌ Kimi Sushi: Ihre Bestellung wurde storniert`;
+      statusHeader = `Bestellung storniert`;
+      statusMessage = `Hallo ${customerName},<br/><br/>leider müssen wir Ihnen mitteilen, dass Ihre Bestellung <strong>#${itemId}</strong> storniert wurde. Sollten Sie bereits bezahlt haben, wird der Betrag zurückerstattet. Bei Rückfragen stehen wir Ihnen gerne zur Verfügung.`;
+    } else {
+      subject = `🍣 Update zu Ihrer Bestellung bei Kimi Sushi`;
+      statusHeader = `Status Update`;
+      statusMessage = `Hallo ${customerName},<br/><br/>der Status Ihrer Bestellung <strong>#${itemId}</strong> wurde auf <strong>${newStatus}</strong> aktualisiert.`;
+    }
+  }
+
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 620px; margin: auto; border: 3px solid ${statusColor}; padding: 24px; border-radius: 14px; background: #fafafa;">
+      <div style="text-align: center; margin-bottom: 24px;">
+        <h1 style="color: ${statusColor}; font-size: 24px; margin: 0; font-family: 'Georgia', serif;">
+          ${statusHeader}
+        </h1>
+        <p style="color: #666; margin: 8px 0 0 0; font-size: 13px;">
+          Bestellnummer: <strong>${itemId}</strong>
+        </p>
+      </div>
+      
+      <div style="background: #ffffff; border-radius: 10px; padding: 20px; margin-bottom: 16px; border: 1px solid #e5e7eb; line-height: 1.6; color: #333; font-size: 14px;">
+        ${statusMessage}
+      </div>
+
+      <div style="background: #f3f4f6; border-radius: 10px; padding: 16px; margin-bottom: 16px; border: 1px solid #e5e7eb;">
+        <h3 style="margin: 0 0 10px 0; color: #374151; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">📋 Zusammenfassung</h3>
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 5px 0; color: #666; font-size: 13px; width: 130px;"><strong>Datum:</strong></td>
+            <td style="padding: 5px 0; font-size: 13px;">${fmtDate}</td>
+          </tr>
+          <tr>
+            <td style="padding: 5px 0; color: #666; font-size: 13px;"><strong>Uhrzeit:</strong></td>
+            <td style="padding: 5px 0; font-size: 13px; font-weight: bold;">${pickupTimeDisplay}</td>
+          </tr>
+          ${!isReservation ? `
+          <tr>
+            <td style="padding: 5px 0; color: #666; font-size: 13px;"><strong>Bestellart:</strong></td>
+            <td style="padding: 5px 0; font-size: 13px;">${method === 'delivery' ? '🚴 Lieferung' : '🏪 Abholung'}</td>
+          </tr>
+          ${method === 'delivery' && address ? `
+          <tr>
+            <td style="padding: 5px 0; color: #666; font-size: 13px; vertical-align: top;"><strong>Lieferadresse:</strong></td>
+            <td style="padding: 5px 0; font-size: 13px;">${address}</td>
+          </tr>` : ''}
+          ` : `
+          <tr>
+            <td style="padding: 5px 0; color: #666; font-size: 13px;"><strong>Gäste:</strong></td>
+            <td style="padding: 5px 0; font-size: 13px; font-weight: bold;">${itemCount}</td>
+          </tr>`}
+        </table>
+      </div>
+
+      ${!isReservation && items.length > 0 ? `
+      <div style="background: #ffffff; border-radius: 10px; padding: 16px; margin-bottom: 16px; border: 1px solid #e5e7eb;">
+        <h3 style="margin: 0 0 12px 0; color: ${statusColor}; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">🛒 Ihre Bestellung</h3>
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr style="border-bottom: 2px solid #eeeeee;">
+            <th style="padding: 8px 5px; text-align: left; color: #555; font-size: 11px;">Gericht</th>
+            <th style="padding: 8px 5px; text-align: center; color: #555; font-size: 11px; width: 60px;">Menge</th>
+            <th style="padding: 8px 5px; text-align: right; color: #555; font-size: 11px; width: 80px;">Preis</th>
+          </tr>
+          ${items.map(item => {
+            const unitPrice = normalizePrice(item.price);
+            const qty = parseInt(item.quantity) || 1;
+            const subtotal = unitPrice * qty;
+            return `<tr>
+              <td style="padding: 8px 5px; border-bottom: 1px solid #f9f9f9; font-size: 13px;">
+                ${item.name || '-'}
+                ${item.note ? `<br/><span style="color:#d97706; font-size:11px; font-style:italic;">↳ ${item.note}</span>` : ''}
+              </td>
+              <td style="padding: 8px 5px; text-align: center; border-bottom: 1px solid #f9f9f9; font-size: 13px; color: #666;">x${qty}</td>
+              <td style="padding: 8px 5px; text-align: right; border-bottom: 1px solid #f9f9f9; font-size: 13px; font-weight: bold;">${fmt(subtotal)}</td>
+            </tr>`;
+          }).join('')}
+          ${parseFloat(deliveryFee) > 0 ? `<tr>
+            <td colspan="2" style="padding: 8px 5px; text-align: right; font-size: 12px; color: #666;">Liefergebühr:</td>
+            <td style="padding: 8px 5px; text-align: right; font-size: 12px; font-weight: bold;">${fmt(parseFloat(deliveryFee))}</td>
+          </tr>` : ''}
+          ${orderData.discountAmount > 0 ? `<tr>
+            <td colspan="2" style="padding: 8px 5px; text-align: right; font-size: 12px; color: #10b981;">Rabatt (${orderData.discountCode || 'CODE'}):</td>
+            <td style="padding: 8px 5px; text-align: right; font-size: 12px; font-weight: bold; color: #10b981;">-${fmt(normalizePrice(orderData.discountAmount))}</td>
+          </tr>` : ''}
+          <tr style="border-top: 2px solid #eeeeee;">
+            <td colspan="2" style="padding: 12px 5px; text-align: right; font-weight: bold; font-size: 14px;">Gesamtbetrag:</td>
+            <td style="padding: 12px 5px; text-align: right; font-weight: bold; font-size: 16px; color: ${statusColor};">${fmt(normalizePrice(orderData.total))}</td>
+          </tr>
+        </table>
+      </div>
+      ` : ''}
+      
+      <div style="text-align: center; margin-top: 24px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
+        <p style="font-size: 12px; color: #666; margin: 0 0 4px 0;"><strong>Kimi Sushi</strong></p>
+        <p style="font-size: 11px; color: #999; margin: 0;">Filderstadt, Deutschland · Tel: ${gmailConfig?.phone || ''}</p>
+        <p style="font-size: 10px; color: #ccc; margin: 8px 0 0 0;">Dies ist eine automatische Benachrichtigung. Bitte antworten Sie nicht direkt auf diese E-Mail.</p>
+      </div>
+    </div>
+  `;
+
+  const transporter = gmailConfig?.gmailPassword
+    ? await createGmailTransporterWithConfig(gmailConfig)
+    : createGmailTransporter();
+
+  if (!transporter) {
+    return { success: false, reason: 'No valid Gmail credentials' };
+  }
+
+  try {
+    const info = await transporter.sendMail({
+      from: `"Kimi Sushi" <${gmailUser}>`,
+      to: customerEmail,
+      subject: subject,
+      html: htmlContent
+    });
+    console.log(`[GMAIL-CUSTOMER] Status change notification sent to ${customerEmail}:`, info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('[GMAIL-CUSTOMER] Error sending status email:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 module.exports = {
   createGmailTransporter,
-  sendGmailNotification
+  sendGmailNotification,
+  sendCustomerStatusEmail
 };

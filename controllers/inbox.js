@@ -53,6 +53,13 @@ async function updateInboxStatus(req, res) {
     const { id } = req.params;
     const { status } = req.body;
     const { tableId } = req.body;
+
+    const existingOrder = await Order.findOne({ id });
+    if (!existingOrder) return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
+
+    const oldStatus = existingOrder.status;
+    const isStatusChanged = oldStatus !== status;
+
     const updateData = { status, updatedAt: new Date() };
     if (tableId) updateData.tableId = tableId;
 
@@ -61,7 +68,6 @@ async function updateInboxStatus(req, res) {
       { $set: updateData },
       { new: true }
     );
-    if (!order) return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
 
     if (status === 'confirmed' && tableId) {
       const Table = require('../models/Table');
@@ -69,6 +75,21 @@ async function updateInboxStatus(req, res) {
         { id: tableId },
         { $set: { status: 'reserved', reservedFor: order.customerName || order.name, reservedTime: order.time, updatedAt: new Date() } }
       );
+    }
+
+    if (isStatusChanged) {
+      const { sendCustomerStatusEmail } = require('../helpers/mail');
+      const settings = await getSettingsObj();
+      const gmailCfg = {
+        gmailEnabled: settings.gmailEnabled || process.env.GMAIL_ENABLED === 'true',
+        gmailUser: settings.gmailUser || process.env.GMAIL_USER,
+        gmailPassword: settings.gmailPassword || process.env.GMAIL_APP_PASSWORD,
+        phone: settings.phone
+      };
+
+      sendCustomerStatusEmail(order, oldStatus, status, gmailCfg).catch(err => {
+        console.error('[GMAIL-CUSTOMER] Error sending status change email:', err);
+      });
     }
 
     res.json({ success: true, order });

@@ -10,6 +10,7 @@ const menuItemSchema = new mongoose.Schema({
   description: String,
   tag: String,
   pieces: String,
+  minQty: String,
   isVisible: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }

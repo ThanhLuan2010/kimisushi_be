@@ -31,14 +31,17 @@ if (!process.env.VERCEL) {
   };
 }
 
-let isConnected = false;
 let reconnectTimer = null;
 
 // Disable query buffering globally so operations fail immediately if database is not connected
 mongoose.set('bufferCommands', false);
 
 async function connectDB() {
-  if (isConnected) return;
+  if (mongoose.connection.readyState === 1) return;
+  if (mongoose.connection.readyState === 2) {
+    console.log('[MongoDB] Already connecting...');
+    return;
+  }
 
   const mongoUrl = process.env.MONGODB_URL;
   if (!mongoUrl) {
@@ -50,7 +53,6 @@ async function connectDB() {
     await mongoose.connect(mongoUrl, {
       serverSelectionTimeoutMS: 5000, // Reduced from 10000 to fail faster
     });
-    isConnected = true;
     console.log('[MongoDB] Connected successfully.');
 
     mongoose.connection.on('error', (err) => {
@@ -58,12 +60,10 @@ async function connectDB() {
     });
     mongoose.connection.on('disconnected', () => {
       console.warn('[MongoDB] Disconnected. Will retry on next operation.');
-      isConnected = false;
       scheduleReconnect();
     });
     mongoose.connection.on('reconnected', () => {
       console.log('[MongoDB] Reconnected successfully.');
-      isConnected = true;
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
@@ -71,7 +71,6 @@ async function connectDB() {
     });
   } catch (err) {
     console.error('[MongoDB] Failed to connect:', err.message);
-    isConnected = false;
     scheduleReconnect();
   }
 }
@@ -87,7 +86,6 @@ function scheduleReconnect(delay = 15000) {
       await mongoose.connect(process.env.MONGODB_URL, {
         serverSelectionTimeoutMS: 5000,
       });
-      isConnected = true;
       console.log('[MongoDB] Reconnected successfully.');
     } catch (err) {
       console.error('[MongoDB] Reconnection failed:', err.message);

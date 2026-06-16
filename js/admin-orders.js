@@ -254,10 +254,10 @@ window.showReservationDetail = function(resId) {
 };
 
 window.updateOrderStatus = function(orderId, newStatus) {
-    fetch('/api/inbox', {
-        method: 'POST',
+    fetch(`/api/inbox/${orderId}/status`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...ordersData.orders.find(o => o.id === orderId), status: newStatus })
+        body: JSON.stringify({ status: newStatus })
     })
     .then(r => r.json())
     .then(() => {

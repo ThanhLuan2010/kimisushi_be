@@ -37,7 +37,7 @@ async function sendGmailNotification(orderData, gmailConfig) {
   const customerEmail = orderData.customerEmail || orderData.email || '-';
   const pickupDateRaw = orderData.pickupDate || orderData.date || '-';
   const pickupTimeRaw = orderData.pickupTime || orderData.time || '-';
-  const pickupTimeDisplay = pickupTimeRaw === 'asap'
+  const pickupTimeDisplay = (pickupTimeRaw === 'asap' || pickupTimeRaw === 'schnell wie möglich')
     ? 'So schnell wie möglich'
     : (pickupTimeRaw !== '-' ? `${pickupTimeRaw} Uhr` : '-');
   const deliveryFee = orderData.deliveryFee || '0';
@@ -224,8 +224,8 @@ async function sendCustomerStatusEmail(orderData, oldStatus, newStatus, gmailCon
   const customerPhone = orderData.customerPhone || orderData.phone || '-';
   const pickupDateRaw = orderData.pickupDate || orderData.date || '-';
   const pickupTimeRaw = orderData.pickupTime || orderData.time || '-';
-  const pickupTimeDisplay = pickupTimeRaw === 'asap'
-    ? 'So schnell wie möglich (ASAP)'
+  const pickupTimeDisplay = (pickupTimeRaw === 'asap' || pickupTimeRaw === 'schnell wie möglich')
+    ? 'So schnell wie möglich'
     : (pickupTimeRaw !== '-' ? `${pickupTimeRaw} Uhr` : '-');
   const deliveryFee = orderData.deliveryFee || '0';
   const address = orderData.address || '-';
@@ -273,11 +273,11 @@ async function sendCustomerStatusEmail(orderData, oldStatus, newStatus, gmailCon
     }
   } else {
     // Orders
-    if (newStatus === 'cooking' || newStatus === 'confirmed') {
+    if (newStatus === 'cooking' || newStatus === 'confirmed' || newStatus === 'in_bearbeitung') {
       subject = `🍣 Kimi Sushi: Ihre Bestellung wird vorbereitet!`;
       statusHeader = `Ihre Bestellung wird vorbereitet`;
       statusMessage = `Hallo ${customerName},<br/><br/>wir haben Ihre Bestellung <strong>#${itemId}</strong> erhalten und bereiten Ihre Gerichte jetzt frisch zu!<br/><br/><strong>Bereitstellungszeit:</strong> ${pickupTimeDisplay}.${orderData.estimatedMinutes ? `<br/><strong>Dự kiến:</strong> trong khoảng ${orderData.estimatedMinutes} Minuten.` : ''}`;
-    } else if (newStatus === 'done') {
+    } else if (newStatus === 'done' || newStatus === 'fertig' || newStatus === 'abgeschlossen') {
       statusColor = '#10b981'; // Success Green
       subject = `🍣 Kimi Sushi: Ihre Bestellung ist fertig!`;
       statusHeader = `Ihre Bestellung ist fertiggestellt`;
@@ -286,7 +286,7 @@ async function sendCustomerStatusEmail(orderData, oldStatus, newStatus, gmailCon
       } else {
         statusMessage = `Hallo ${customerName},<br/><br/>Ihre Bestellung <strong>#${itemId}</strong> steht zur Abholung bereit! Sie können Ihre Speisen ab sofort bei uns abholen.`;
       }
-    } else if (newStatus === 'cancelled') {
+    } else if (newStatus === 'cancelled' || newStatus === 'storniert') {
       statusColor = '#ef4444'; // Cancelled Red
       subject = `❌ Kimi Sushi: Ihre Bestellung wurde storniert`;
       statusHeader = `Bestellung storniert`;

@@ -87,9 +87,11 @@ async function updateInboxStatus(req, res) {
         phone: settings.phone
       };
 
-      sendCustomerStatusEmail(order, oldStatus, status, gmailCfg).catch(err => {
+      try {
+        await sendCustomerStatusEmail(order, oldStatus, status, gmailCfg);
+      } catch (err) {
         console.error('[GMAIL-CUSTOMER] Error sending status change email:', err);
-      });
+      }
     }
 
     res.json({ success: true, order });
@@ -106,6 +108,18 @@ async function createInboxItem(req, res) {
     if (!item.id) {
       item.id = (item.type === 'reservation' ? 'res_' : 'order_') + Date.now();
     }
+
+    let isNewItem = true;
+    let oldStatus = null;
+    let isStatusChanged = false;
+
+    const existingOrder = await Order.findOne({ id: item.id });
+    if (existingOrder) {
+      isNewItem = false;
+      oldStatus = existingOrder.status;
+      isStatusChanged = oldStatus !== item.status;
+    }
+
     item.createdAt = new Date();
     item.updatedAt = new Date();
 
@@ -115,13 +129,20 @@ async function createInboxItem(req, res) {
     if (item.email) item.customerEmail = item.email;
     if (item.message) item.notes = item.message;
 
+    // Map date/time to pickupDate/pickupTime for orders
+    if (item.type !== 'reservation') {
+      if (item.date && !item.pickupDate) item.pickupDate = item.date;
+      if (item.time && !item.pickupTime) item.pickupTime = item.time;
+    }
+
     // ASAP resolution — using shared dateUtils for consistent Europe/Berlin timezone
-    if (item.type !== 'reservation' && item.pickupTime === 'asap') {
+    if (item.type !== 'reservation' && (item.pickupTime === 'asap' || item.time === 'asap')) {
       const settings = await getSettingsObj();
       const resolved = resolveAsapPickup(settings);
       item.pickupDate = resolved.pickupDate;
       item.pickupTime = resolved.pickupTime;
       item.pickupTimeDisplay = resolved.pickupTimeDisplay;
+      item.time = resolved.pickupTime;
     }
 
     // Upsert: update if exists, create if not
@@ -139,63 +160,85 @@ async function createInboxItem(req, res) {
       gmailNotifyEmail: item.gmailNotifyEmail || process.env.GMAIL_NOTIFY_EMAIL || process.env.GMAIL_USER
     };
     
-    if (gmailCfg.gmailEnabled && gmailCfg.gmailUser && gmailCfg.gmailPassword) {
-      sendGmailNotification(item, gmailCfg).catch(err => {
+    if (isNewItem && gmailCfg.gmailEnabled && gmailCfg.gmailUser && gmailCfg.gmailPassword) {
+      try {
+        await sendGmailNotification(item, gmailCfg);
+      } catch (err) {
         console.error('[AUTO-GMAIL] Error:', err);
-      });
-    }
-
-    // Telegram notification
-    const isReservation = item.type === 'reservation';
-    const customerName = item.name || item.customerName || '-';
-    const phone = item.phone || item.customerPhone || '-';
-    const customerEmail = item.email || item.customerEmail || '-';
-    const status = item.status || 'neu';
-
-    let telegramMsg;
-    if (isReservation) {
-      const guests = item.guests || item.persons || '-';
-      const notes = item.notes || item.remark || '-';
-      const resDate = item.date || '-';
-      const resTime = item.time || '-';
-      const fmtDate = resDate !== '-' ? resDate.split('-').reverse().join('.') : '-';
-      const fmtTime = resTime !== '-' ? `${resTime} Uhr` : '-';
-
-      telegramMsg = `📅 NEUE TISCHRESERVIERUNG\n\n━━━━━━━━━━━━━━━\n🔖 Nr.: ${item.id || '-'}\n👤 Kunde: ${customerName}\n📞 Telefon: ${phone}\n📧 E-Mail: ${customerEmail}\n━━━━━━━━━━━━━━━\n🗓 Datum: ${fmtDate}\n🕒 Uhrzeit: ${fmtTime}\n👥 Personen: ${guests}\n━━━━━━━━━━━━━━━\n📝 Anmerkung: ${notes}\n━━━━━━━━━━━━━━━\nStatus: ${status.toUpperCase()}`;
-    } else {
-      const total = item.total ? `${item.total.replace('.', ',')} €` : '-';
-      const method = item.method === 'delivery' ? '🚴 Lieferung' : '🏪 Abholung';
-      const address = item.address && item.address !== 'Abholung / Vor Ort' ? item.address : '-';
-      const orderDate = item.date || item.pickupDate || '-';
-      const orderTime = item.time || item.pickupTime || item.pickupTimeDisplay || '-';
-      const timeDisplay = orderTime === 'asap' ? 'So schnell wie möglich' : orderTime;
-
-      let itemsDetail = '';
-      const src = item.items || item.cart || [];
-      if (src.length > 0) {
-        src.forEach(i => {
-          const qty = i.quantity || 1;
-          const price = i.price ? ` — ${i.price}` : '';
-          itemsDetail += `\n  ▸ ${i.name || '-'} x${qty}${price}`;
-        });
       }
-
-      telegramMsg = `🍣 NEUE BESTELLUNG\n\n━━━━━━━━━━━━━━━\n📋 BESTELL-NR.: ${item.id || '-'}\n━━━━━━━━━━━━━━━\n👤 Kunde: ${customerName}\n📞 Telefon: ${phone}\n📧 E-Mail: ${customerEmail}\n━━━━━━━━━━━━━━━\n🏪 Bestellart: ${method}\n${item.method === 'delivery' ? `📍 Adresse: ${address}\n` : ''}━━━━━━━━━━━━━━━\n🗓 Datum: ${orderDate !== '-' ? orderDate.split('-').reverse().join('.') : '-'}\n🕒 Abholzeit: ${timeDisplay}\n━━━━━━━━━━━━━━━\n${item.notes && item.notes.trim() ? `⚠️ ALLERGIEN / WÜNSCHE:\n  ${item.notes.trim()}\n━━━━━━━━━━━━━━━\n` : ''}📋 Bestellte Artikel:${itemsDetail || '\n  (keine Details)'}\n━━━━━━━━━━━━━━━\n💰 Gesamtbetrag: ${total}\n━━━━━━━━━━━━━━━\nStatus: ${status.toUpperCase()}`;
     }
 
-    // Only orders get inline action buttons
-    const replyMarkup = isReservation ? undefined : buildOrderInlineKeyboard(item.id);
-    sendTelegramMessage(telegramMsg, replyMarkup);
+    // Customer Status Change email notification (For existing orders when status changes)
+    if (isStatusChanged) {
+      const { sendCustomerStatusEmail } = require('../helpers/mail');
+      const settings = await getSettingsObj();
+      const statusEmailCfg = {
+        gmailEnabled: settings.gmailEnabled || process.env.GMAIL_ENABLED === 'true',
+        gmailUser: settings.gmailUser || process.env.GMAIL_USER,
+        gmailPassword: settings.gmailPassword || process.env.GMAIL_APP_PASSWORD,
+        phone: settings.phone
+      };
 
-    // Send Firebase Push Notification
-    const tokensDoc = await FcmToken.find({}, 'token');
-    if (tokensDoc.length > 0) {
-      const tokens = tokensDoc.map(t => t.token);
+      try {
+        await sendCustomerStatusEmail(savedOrder, oldStatus, item.status, statusEmailCfg);
+      } catch (err) {
+        console.error('[GMAIL-CUSTOMER] Error sending status change email in createInboxItem:', err);
+      }
+    }
+
+    if (isNewItem) {
+      // Telegram notification
+      const isReservation = item.type === 'reservation';
+      const customerName = item.name || item.customerName || '-';
+      const phone = item.phone || item.customerPhone || '-';
+      const customerEmail = item.email || item.customerEmail || '-';
+      const status = item.status || 'neu';
+
+      let telegramMsg;
       if (isReservation) {
-        await sendPushNotification(tokens, '📅 Neue Reservierung!', `Tischreservierung von ${customerName || '-'}`);
+        const guests = item.guests || item.persons || '-';
+        const notes = item.notes || item.remark || '-';
+        const resDate = item.date || '-';
+        const resTime = item.time || '-';
+        const fmtDate = resDate !== '-' ? resDate.split('-').reverse().join('.') : '-';
+        const fmtTime = resTime !== '-' ? `${resTime} Uhr` : '-';
+
+        telegramMsg = `📅 NEUE TISCHRESERVIERUNG\n\n━━━━━━━━━━━━━━━\n🔖 Nr.: ${item.id || '-'}\n👤 Kunde: ${customerName}\n📞 Telefon: ${phone}\n📧 E-Mail: ${customerEmail}\n━━━━━━━━━━━━━━━\n🗓 Datum: ${fmtDate}\n🕒 Uhrzeit: ${fmtTime}\n👥 Personen: ${guests}\n━━━━━━━━━━━━━━━\n📝 Anmerkung: ${notes}\n━━━━━━━━━━━━━━━\nStatus: ${status.toUpperCase()}`;
       } else {
         const total = item.total ? `${item.total.replace('.', ',')} €` : '-';
-        await sendPushNotification(tokens, '🍣 Neue Bestellung!', `Bestellung #${item.id || '-'} von ${customerName || '-'} (${total})`);
+        const method = item.method === 'delivery' ? '🚴 Lieferung' : '🏪 Abholung';
+        const address = item.address && item.address !== 'Abholung / Vor Ort' ? item.address : '-';
+        const orderDate = item.date || item.pickupDate || '-';
+        const orderTime = item.time || item.pickupTime || item.pickupTimeDisplay || '-';
+        const timeDisplay = orderTime === 'asap' ? 'So schnell wie möglich' : orderTime;
+
+        let itemsDetail = '';
+        const src = item.items || item.cart || [];
+        if (src.length > 0) {
+          src.forEach(i => {
+            const qty = i.quantity || 1;
+            const price = i.price ? ` — ${i.price}` : '';
+            itemsDetail += `\n  ▸ ${i.name || '-'} x${qty}${price}`;
+          });
+        }
+
+        telegramMsg = `🍣 NEUE BESTELLUNG\n\n━━━━━━━━━━━━━━━\n📋 BESTELL-NR.: ${item.id || '-'}\n━━━━━━━━━━━━━━━\n👤 Kunde: ${customerName}\n📞 Telefon: ${phone}\n📧 E-Mail: ${customerEmail}\n━━━━━━━━━━━━━━━\n🏪 Bestellart: ${method}\n${item.method === 'delivery' ? `📍 Adresse: ${address}\n` : ''}━━━━━━━━━━━━━━━\n🗓 Datum: ${orderDate !== '-' ? orderDate.split('-').reverse().join('.') : '-'}\n🕒 Abholzeit: ${timeDisplay}\n━━━━━━━━━━━━━━━\n${item.notes && item.notes.trim() ? `⚠️ ALLERGIEN / WÜNSCHE:\n  ${item.notes.trim()}\n━━━━━━━━━━━━━━━\n` : ''}📋 Bestellte Artikel:${itemsDetail || '\n  (keine Details)'}\n━━━━━━━━━━━━━━━\n💰 Gesamtbetrag: ${total}\n━━━━━━━━━━━━━━━\nStatus: ${status.toUpperCase()}`;
+      }
+
+      // Only orders get inline action buttons
+      const replyMarkup = isReservation ? undefined : buildOrderInlineKeyboard(item.id);
+      sendTelegramMessage(telegramMsg, replyMarkup);
+
+      // Send Firebase Push Notification
+      const tokensDoc = await FcmToken.find({}, 'token');
+      if (tokensDoc.length > 0) {
+        const tokens = tokensDoc.map(t => t.token);
+        if (isReservation) {
+          await sendPushNotification(tokens, '📅 Neue Reservierung!', `Tischreservierung von ${customerName || '-'}`);
+        } else {
+          const total = item.total ? `${item.total.replace('.', ',')} €` : '-';
+          await sendPushNotification(tokens, '🍣 Neue Bestellung!', `Bestellung #${item.id || '-'} von ${customerName || '-'} (${total})`);
+        }
       }
     }
 

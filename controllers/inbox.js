@@ -140,9 +140,9 @@ async function createInboxItem(req, res) {
       const settings = await getSettingsObj();
       const resolved = resolveAsapPickup(settings);
       item.pickupDate = resolved.pickupDate;
-      item.pickupTime = resolved.pickupTime;
+      item.pickupTime = 'asap';
       item.pickupTimeDisplay = resolved.pickupTimeDisplay;
-      item.time = resolved.pickupTime;
+      item.time = 'asap';
     }
 
     // Upsert: update if exists, create if not

@@ -42,6 +42,8 @@ const orderSchema = new mongoose.Schema({
   gmailUser: String,
   gmailPassword: String,
   gmailNotifyEmail: String,
+  // Preparation timing
+  estimatedMinutes: Number,
   // Meta
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }

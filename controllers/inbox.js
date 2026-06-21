@@ -51,8 +51,7 @@ async function getInbox(req, res) {
 async function updateInboxStatus(req, res) {
   try {
     const { id } = req.params;
-    const { status } = req.body;
-    const { tableId } = req.body;
+    const { status, tableId, estimatedMinutes } = req.body;
 
     const existingOrder = await Order.findOne({ id });
     if (!existingOrder) return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
@@ -62,6 +61,7 @@ async function updateInboxStatus(req, res) {
 
     const updateData = { status, updatedAt: new Date() };
     if (tableId) updateData.tableId = tableId;
+    if (estimatedMinutes !== undefined) updateData.estimatedMinutes = estimatedMinutes;
 
     const order = await Order.findOneAndUpdate(
       { id },

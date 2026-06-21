@@ -224,9 +224,31 @@ async function sendCustomerStatusEmail(orderData, oldStatus, newStatus, gmailCon
   const customerPhone = orderData.customerPhone || orderData.phone || '-';
   const pickupDateRaw = orderData.pickupDate || orderData.date || '-';
   const pickupTimeRaw = orderData.pickupTime || orderData.time || '-';
-  const pickupTimeDisplay = (pickupTimeRaw === 'asap' || pickupTimeRaw === 'schnell wie möglich')
+  let pickupTimeDisplay = (pickupTimeRaw === 'asap' || pickupTimeRaw === 'schnell wie möglich')
     ? 'So schnell wie möglich'
     : (pickupTimeRaw !== '-' ? `${pickupTimeRaw} Uhr` : '-');
+
+  if (orderData.estimatedMinutes && orderData.estimatedMinutes > 0) {
+    const baseTime = orderData.updatedAt ? new Date(orderData.updatedAt) : new Date();
+    const readyTime = new Date(baseTime.getTime() + orderData.estimatedMinutes * 60 * 1000);
+    try {
+      const formatter = new Intl.DateTimeFormat('de-DE', {
+        timeZone: 'Europe/Berlin',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+      const parts = formatter.formatToParts(readyTime);
+      const hh = parts.find(p => p.type === 'hour').value;
+      const mm = parts.find(p => p.type === 'minute').value;
+      pickupTimeDisplay = `ca. ${hh}:${mm} Uhr (in ${orderData.estimatedMinutes} Minuten)`;
+    } catch (e) {
+      const hh = String(readyTime.getHours()).padStart(2, '0');
+      const mm = String(readyTime.getMinutes()).padStart(2, '0');
+      pickupTimeDisplay = `ca. ${hh}:${mm} Uhr (in ${orderData.estimatedMinutes} Minuten)`;
+    }
+  }
+
   const deliveryFee = orderData.deliveryFee || '0';
   const address = orderData.address || '-';
   const method = orderData.method || '-';
@@ -276,7 +298,7 @@ async function sendCustomerStatusEmail(orderData, oldStatus, newStatus, gmailCon
     if (newStatus === 'cooking' || newStatus === 'confirmed' || newStatus === 'in_bearbeitung') {
       subject = `🍣 Kimi Sushi: Ihre Bestellung wird vorbereitet!`;
       statusHeader = `Ihre Bestellung wird vorbereitet`;
-      statusMessage = `Hallo ${customerName},<br/><br/>wir haben Ihre Bestellung <strong>#${itemId}</strong> erhalten und bereiten Ihre Gerichte jetzt frisch zu!<br/><br/><strong>Bereitstellungszeit:</strong> ${pickupTimeDisplay}.${orderData.estimatedMinutes ? `<br/><strong>Dự kiến:</strong> trong khoảng ${orderData.estimatedMinutes} Minuten.` : ''}`;
+      statusMessage = `Hallo ${customerName},<br/><br/>wir haben Ihre Bestellung <strong>#${itemId}</strong> erhalten und bereiten Ihre Gerichte jetzt frisch zu!<br/><br/><strong>Bereitstellungszeit:</strong> ${pickupTimeDisplay}.`;
     } else if (newStatus === 'done' || newStatus === 'fertig' || newStatus === 'abgeschlossen') {
       statusColor = '#10b981'; // Success Green
       subject = `🍣 Kimi Sushi: Ihre Bestellung ist fertig!`;

@@ -51,7 +51,7 @@ async function getInbox(req, res) {
 async function updateInboxStatus(req, res) {
   try {
     const { id } = req.params;
-    const { status, tableId, estimatedMinutes } = req.body;
+    const { status, tableId, estimatedMinutes, skipEmail } = req.body;
 
     const existingOrder = await Order.findOne({ id });
     if (!existingOrder) return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
@@ -77,7 +77,7 @@ async function updateInboxStatus(req, res) {
       );
     }
 
-    if (isStatusChanged) {
+    if (isStatusChanged && !skipEmail) {
       const { sendCustomerStatusEmail } = require('../helpers/mail');
       const settings = await getSettingsObj();
       const gmailCfg = {

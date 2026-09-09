@@ -3,6 +3,16 @@ const nodemailer = require('nodemailer');
 function createGmailTransporter(gmailUser, gmailPassword) {
   const user = gmailUser || process.env.GMAIL_USER;
   const pass = gmailPassword || process.env.GMAIL_APP_PASSWORD;
+  
+  if (process.env.SMTP_HOST) {
+    return nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT) || 465,
+      secure: process.env.SMTP_SECURE === 'true' || Number(process.env.SMTP_PORT) === 465,
+      auth: { user, pass }
+    });
+  }
+
   return nodemailer.createTransport({
     service: 'gmail',
     auth: { user, pass }
@@ -13,6 +23,16 @@ function createGmailTransporterWithConfig(gmailConfig) {
   const user = gmailConfig?.gmailUser || process.env.GMAIL_USER;
   const pass = gmailConfig?.gmailPassword || process.env.GMAIL_APP_PASSWORD;
   if (!user || !pass) return null;
+
+  if (process.env.SMTP_HOST) {
+    return nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT) || 465,
+      secure: process.env.SMTP_SECURE === 'true' || Number(process.env.SMTP_PORT) === 465,
+      auth: { user, pass }
+    });
+  }
+
   return nodemailer.createTransport({
     service: 'gmail',
     auth: { user, pass }

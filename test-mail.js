@@ -17,7 +17,7 @@ async function testEmails() {
     status: 'cooking',
     customerName: 'Test User',
     customerPhone: '0123456789',
-    customerEmail: "luancv2010@gmail.com", // Send to yourself for testing
+    customerEmail: "test-hnf13ew32@srv1.mail-tester.com", // Send to yourself for testing
     address: 'Teststraße 1, 12345 Teststadt',
     pickupDate: '2025-12-31',
     pickupTime: '18:00',

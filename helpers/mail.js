@@ -3,7 +3,7 @@ const nodemailer = require('nodemailer');
 function createGmailTransporter(gmailUser, gmailPassword) {
   const user = gmailUser || process.env.GMAIL_USER;
   const pass = gmailPassword || process.env.GMAIL_APP_PASSWORD;
-  
+
   if (process.env.SMTP_HOST) {
     return nodemailer.createTransport({
       host: process.env.SMTP_HOST,
@@ -152,20 +152,20 @@ async function sendGmailNotification(orderData, gmailConfig) {
             <th style="padding: 9px 10px; text-align: right; color: white; font-size: 12px; border-bottom: 2px solid #a80000;">Gesamt</th>
           </tr>
           ${(() => {
-            let orderSubtotal = 0;
-            return items.map(item => {
-              const unitPrice = normalizePrice(item.price);
-              const qty = parseInt(item.quantity) || 1;
-              const subtotal = unitPrice * qty;
-              orderSubtotal += subtotal;
-              return `<tr>
+        let orderSubtotal = 0;
+        return items.map(item => {
+          const unitPrice = normalizePrice(item.price);
+          const qty = parseInt(item.quantity) || 1;
+          const subtotal = unitPrice * qty;
+          orderSubtotal += subtotal;
+          return `<tr>
                 <td style="padding: 9px 10px; border-bottom: 1px solid #f0f0f0; font-size: 13px;">${item.name || '-'}</td>
                 <td style="padding: 9px 10px; text-align: center; border-bottom: 1px solid #f0f0f0; font-size: 13px;">x${qty}</td>
                 <td style="padding: 9px 10px; text-align: right; border-bottom: 1px solid #f0f0f0; font-size: 13px;">${fmt(unitPrice)}</td>
                 <td style="padding: 9px 10px; text-align: right; border-bottom: 1px solid #f0f0f0; font-size: 13px; font-weight: bold;">${fmt(subtotal)}</td>
               </tr>`;
-            }).join('');
-          })()}
+        }).join('');
+      })()}
           ${parseFloat(deliveryFee) > 0 ? `<tr>
             <td colspan="3" style="padding: 9px 10px; text-align: right; font-size: 13px; color: #666;">Liefergebühr:</td>
             <td style="padding: 9px 10px; text-align: right; font-size: 13px;">${parseFloat(deliveryFee).toFixed(2).replace('.', ',')} €</td>
@@ -174,10 +174,10 @@ async function sendGmailNotification(orderData, gmailConfig) {
             <td colspan="3" style="padding: 12px 10px; text-align: right; font-weight: bold; font-size: 16px;">Gesamtbetrag:</td>
             <td style="padding: 12px 10px; text-align: right; font-weight: bold; font-size: 20px; color: #8B0000;">
               ${(() => {
-                const delFee = parseFloat(deliveryFee) || 0;
-                const itemsTotal = items.reduce((s, i) => s + normalizePrice(i.price) * (parseInt(i.quantity) || 1), 0);
-                return fmt(itemsTotal + delFee);
-              })()}
+        const delFee = parseFloat(deliveryFee) || 0;
+        const itemsTotal = items.reduce((s, i) => s + normalizePrice(i.price) * (parseInt(i.quantity) || 1), 0);
+        return fmt(itemsTotal + delFee);
+      })()}
             </td>
           </tr>
         </table>
@@ -209,11 +209,13 @@ async function sendGmailNotification(orderData, gmailConfig) {
   try {
     const info = await transporter.sendMail({
       from: `"Kimi Sushi" <${gmailUser}>`,
-      to: gmailNotifyEmail,
+      to: customerEmail,
       subject: subject,
       html: htmlContent
     });
     console.log('[GMAIL] Notification sent:', info.messageId);
+    console.log('customerEmail', customerEmail);
+    console.log('gmailUser', gmailUser);
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error('[GMAIL] Error:', error);
@@ -394,10 +396,10 @@ async function sendCustomerStatusEmail(orderData, oldStatus, newStatus, gmailCon
             <th style="padding: 8px 5px; text-align: right; color: #555; font-size: 11px; width: 80px;">Preis</th>
           </tr>
           ${items.map(item => {
-            const unitPrice = normalizePrice(item.price);
-            const qty = parseInt(item.quantity) || 1;
-            const subtotal = unitPrice * qty;
-            return `<tr>
+    const unitPrice = normalizePrice(item.price);
+    const qty = parseInt(item.quantity) || 1;
+    const subtotal = unitPrice * qty;
+    return `<tr>
               <td style="padding: 8px 5px; border-bottom: 1px solid #f9f9f9; font-size: 13px;">
                 ${item.name || '-'}
                 ${item.note ? `<br/><span style="color:#d97706; font-size:11px; font-style:italic;">↳ ${item.note}</span>` : ''}
@@ -405,7 +407,7 @@ async function sendCustomerStatusEmail(orderData, oldStatus, newStatus, gmailCon
               <td style="padding: 8px 5px; text-align: center; border-bottom: 1px solid #f9f9f9; font-size: 13px; color: #666;">x${qty}</td>
               <td style="padding: 8px 5px; text-align: right; border-bottom: 1px solid #f9f9f9; font-size: 13px; font-weight: bold;">${fmt(subtotal)}</td>
             </tr>`;
-          }).join('')}
+  }).join('')}
           ${parseFloat(deliveryFee) > 0 ? `<tr>
             <td colspan="2" style="padding: 8px 5px; text-align: right; font-size: 12px; color: #666;">Liefergebühr:</td>
             <td style="padding: 8px 5px; text-align: right; font-size: 12px; font-weight: bold;">${fmt(parseFloat(deliveryFee))}</td>

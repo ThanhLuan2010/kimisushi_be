@@ -209,7 +209,7 @@ async function sendGmailNotification(orderData, gmailConfig) {
   try {
     const info = await transporter.sendMail({
       from: `"Kimi Sushi" <${gmailUser}>`,
-      to: gmailNotifyEmail,
+      to: "kimisushi.restaurant@gmail.com",
       subject: subject,
       html: htmlContent
     });

@@ -83,7 +83,7 @@ async function updateInboxStatus(req, res) {
       const gmailCfg = {
         gmailEnabled: settings.gmailEnabled || process.env.GMAIL_ENABLED === 'true',
         gmailUser: settings.gmailUser || process.env.GMAIL_USER,
-        gmailPassword: settings.gmailPassword || process.env.GMAIL_APP_PASSWORD,
+        gmailPassword: process.env.GMAIL_APP_PASSWORD,
         phone: settings.phone
       };
 
@@ -156,10 +156,10 @@ async function createInboxItem(req, res) {
     const gmailCfg = {
       gmailEnabled: item.gmailEnabled || process.env.GMAIL_ENABLED === 'true',
       gmailUser: item.gmailUser || process.env.GMAIL_USER,
-      gmailPassword: item.gmailPassword || process.env.GMAIL_APP_PASSWORD,
+      gmailPassword: process.env.GMAIL_APP_PASSWORD,
       gmailNotifyEmail: item.gmailNotifyEmail || process.env.GMAIL_NOTIFY_EMAIL || process.env.GMAIL_USER
     };
-    
+
     if (isNewItem && gmailCfg.gmailEnabled && gmailCfg.gmailUser && gmailCfg.gmailPassword) {
       try {
         await sendGmailNotification(item, gmailCfg);
@@ -175,7 +175,7 @@ async function createInboxItem(req, res) {
       const statusEmailCfg = {
         gmailEnabled: settings.gmailEnabled || process.env.GMAIL_ENABLED === 'true',
         gmailUser: settings.gmailUser || process.env.GMAIL_USER,
-        gmailPassword: settings.gmailPassword || process.env.GMAIL_APP_PASSWORD,
+        gmailPassword: process.env.GMAIL_APP_PASSWORD,
         phone: settings.phone
       };
 

@@ -1,4 +1,5 @@
 const admin = require('firebase-admin');
+const FcmToken = require('../models/FcmToken');
 
 // Parse FIREBASE_SERVICE_ACCOUNT from environment variables
 let isFirebaseInitialized = false;
@@ -62,7 +63,7 @@ async function sendPushNotification(tokens, title, body, data = {}, options = {}
       apns: {
         payload: {
           aps: {
-            sound: `${soundName}.wav`
+            sound: soundName + '.wav'
           }
         }
       },
@@ -70,7 +71,7 @@ async function sendPushNotification(tokens, title, body, data = {}, options = {}
     };
     try {
       const response = await admin.messaging().sendEachForMulticast(message);
-      console.log(`[Firebase] Successfully sent ${response.successCount}, failed ${response.failureCount}`);
+      console.log('[Firebase] Successfully sent ' + response.successCount + ', failed ' + response.failureCount);
       if (response.failureCount > 0) {
         response.responses.forEach((resp, idx) => {
           if (!resp.success) {
@@ -87,7 +88,7 @@ async function sendPushNotification(tokens, title, body, data = {}, options = {}
   if (expoTokens.length > 0) {
     const expoMessages = expoTokens.map(token => ({
       to: token,
-      sound: soundName.endsWith('.wav') ? soundName : `${soundName}.wav`,
+      sound: soundName.endsWith('.wav') ? soundName : soundName + '.wav',
       priority: 'high',
       channelId: channelId,
       title,
@@ -106,7 +107,20 @@ async function sendPushNotification(tokens, title, body, data = {}, options = {}
         body: JSON.stringify(expoMessages)
       });
       const result = await response.json();
-      console.log(`[Expo Push] Response:`, JSON.stringify(result));
+      console.log('[Expo Push] Sent ' + expoTokens.length + ' messages. Response:', JSON.stringify(result));
+
+      // Clean up invalid or unregistered tokens automatically
+      if (result && Array.isArray(result.data)) {
+        result.data.forEach((ticket, idx) => {
+          if (ticket.status === 'error' && ticket.details && ticket.details.error === 'DeviceNotRegistered') {
+            const badToken = expoTokens[idx];
+            if (badToken) {
+              console.log('[Expo Push] Cleaning up unregistered token: ' + badToken);
+              FcmToken.deleteOne({ token: badToken }).catch(console.warn);
+            }
+          }
+        });
+      }
     } catch (error) {
       console.error('[Expo Push] Error sending Expo messages:', error);
     }

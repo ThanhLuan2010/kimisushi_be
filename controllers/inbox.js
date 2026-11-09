@@ -35,12 +35,22 @@ async function getSettingsObj() {
 
 async function getInbox(req, res) {
   try {
-    const { type, status, limit = 50 } = req.query;
+    const { type, status, method, limit = 100 } = req.query;
     const filter = {};
-    if (type) filter.type = type;
-    if (status) filter.status = status;
+    if (type) {
+      if (type.includes(',')) filter.type = { $in: type.split(',') };
+      else filter.type = type;
+    }
+    if (status) {
+      if (status.includes(',')) filter.status = { $in: status.split(',') };
+      else filter.status = status;
+    }
+    if (method) {
+      if (method.includes(',')) filter.method = { $in: method.split(',') };
+      else filter.method = method;
+    }
 
-    const items = await Order.find(filter).sort({ createdAt: -1 }).limit(parseInt(limit));
+    const items = await Order.find(filter).sort({ completedAt: -1, createdAt: -1 }).limit(parseInt(limit));
     res.json({ success: true, count: items.length, items });
   } catch (e) {
     console.error('[API] GET /api/inbox error:', e);
@@ -51,7 +61,7 @@ async function getInbox(req, res) {
 async function updateInboxStatus(req, res) {
   try {
     const { id } = req.params;
-    const { status, tableId, estimatedMinutes, skipEmail } = req.body;
+    const { status, tableId, estimatedMinutes, skipEmail, paymentMethod } = req.body;
 
     const existingOrder = await Order.findOne({ id });
     if (!existingOrder) return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
@@ -60,6 +70,10 @@ async function updateInboxStatus(req, res) {
     const isStatusChanged = oldStatus !== status;
 
     const updateData = { status, updatedAt: new Date() };
+    if (status === 'done' && !existingOrder.completedAt) {
+      updateData.completedAt = new Date();
+    }
+    if (paymentMethod) updateData.paymentMethod = paymentMethod;
     if (tableId) updateData.tableId = tableId;
     if (estimatedMinutes !== undefined) updateData.estimatedMinutes = estimatedMinutes;
 
@@ -122,6 +136,9 @@ async function createInboxItem(req, res) {
 
     item.createdAt = new Date();
     item.updatedAt = new Date();
+    if (item.status === 'done' && !item.completedAt) {
+      item.completedAt = new Date();
+    }
 
     // Map fields for Mongoose Schema strict mode
     if (item.name) item.customerName = item.name;
@@ -186,7 +203,7 @@ async function createInboxItem(req, res) {
       }
     }
 
-    if (isNewItem) {
+    if (isNewItem && item.method !== 'dine-in') {
       // Telegram notification
       const isReservation = item.type === 'reservation';
       const customerName = item.name || item.customerName || '-';

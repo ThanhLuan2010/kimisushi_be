@@ -9,13 +9,16 @@ const orderSchema = new mongoose.Schema({
   customerEmail: String,
   // Order details
   tableId: String,
+  tableName: String,
+  paymentMethod: { type: String, default: 'cash' },
   items: [{
     id: String,
     name: String,
     price: String,
     quantity: { type: Number, default: 1 },
     category: String,
-    image: String
+    image: String,
+    note: String
   }],
   cart: { type: Array, default: [] },
   total: String,
@@ -45,6 +48,7 @@ const orderSchema = new mongoose.Schema({
   // Preparation timing
   estimatedMinutes: Number,
   // Meta
+  completedAt: Date,
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });

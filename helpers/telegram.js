@@ -18,25 +18,28 @@ function isValidChatId(id) {
 }
 
 async function getTelegramCredentials() {
-  let token = process.env.TELEGRAM_BOT_TOKEN;
-  let chatId = process.env.TELEGRAM_CHAT_ID;
-
-  if (!isValidChatId(chatId)) {
-    chatId = null;
-  }
+  let token = null;
+  let chatId = null;
 
   try {
     const settings = await Settings.findOne({});
     if (settings) {
-      if (!token && settings.telegramBotToken) {
+      if (settings.telegramBotToken) {
         token = settings.telegramBotToken;
       }
-      if (!chatId && isValidChatId(settings.telegramChatId)) {
+      if (isValidChatId(settings.telegramChatId)) {
         chatId = settings.telegramChatId;
       }
     }
   } catch (err) {
     console.warn('[TELEGRAM] Error getting credentials from Settings:', err.message);
+  }
+
+  // Fallback về process.env nếu trong DB chưa có
+  if (!token) token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!isValidChatId(chatId)) {
+    const envChatId = process.env.TELEGRAM_CHAT_ID;
+    if (isValidChatId(envChatId)) chatId = envChatId;
   }
 
   return { token, chatId };

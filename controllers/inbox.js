@@ -191,6 +191,7 @@ async function createInboxItem(req, res) {
       const isReservation = item.type === 'reservation';
       const customerName = item.name || item.customerName || '-';
       const phone = item.phone || item.customerPhone || '-';
+      const phoneDisplay = phone && phone !== '-' ? `<a href="tel:${escapeHtml(phone)}">${escapeHtml(phone)}</a>` : '-';
       const customerEmail = item.email || item.customerEmail || '-';
       const status = item.status || 'neu';
 
@@ -207,7 +208,7 @@ async function createInboxItem(req, res) {
           `━━━━━━━━━━━━━━━\n` +
           `🔖 <b>Mã đặt bàn:</b> <code>${escapeHtml(item.id || '-')}</code>\n` +
           `👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n` +
-          `📞 <b>Điện thoại:</b> ${escapeHtml(phone)}\n` +
+          `📞 <b>Điện thoại:</b> ${phoneDisplay}\n` +
           `📧 <b>E-Mail:</b> ${escapeHtml(customerEmail)}\n` +
           `━━━━━━━━━━━━━━━\n` +
           `🗓 <b>Ngày:</b> ${escapeHtml(fmtDate)}\n` +
@@ -243,7 +244,7 @@ async function createInboxItem(req, res) {
           `📋 <b>MÃ ĐƠN:</b> <code>${escapeHtml(item.id || '-')}</code>\n` +
           `━━━━━━━━━━━━━━━\n` +
           `👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n` +
-          `📞 <b>Điện thoại:</b> ${escapeHtml(phone)}\n` +
+          `📞 <b>Điện thoại:</b> ${phoneDisplay}\n` +
           `📧 <b>E-Mail:</b> ${escapeHtml(customerEmail)}\n` +
           `━━━━━━━━━━━━━━━\n` +
           `🏪 <b>Hình thức:</b> ${method}\n` +

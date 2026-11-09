@@ -360,13 +360,29 @@ async function testTelegram(req, res) {
       `🕒 Thời gian: ${new Date().toLocaleString('vi-VN')}\n` +
       `💬 Chat ID: <code>${chatId}</code>`;
 
-    const sentId = await sendTelegramMessage(testMsg, null, token, chatId);
-    if (sentId) {
-      return res.json({ success: true, message: 'Đã gửi tin nhắn test thành công!', messageId: sentId });
+    const teleRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: testMsg,
+        parse_mode: 'HTML'
+      })
+    });
+
+    const teleData = await teleRes.json();
+    if (teleData.ok) {
+      return res.json({
+        success: true,
+        message: 'Đã gửi tin nhắn test thành công!',
+        messageId: teleData.result?.message_id
+      });
     } else {
-      return res.status(500).json({
+      return res.status(400).json({
         success: false,
-        message: 'Không thể gửi tin nhắn. Hãy kiểm tra Chat ID và đảm bảo bạn đã bấm /start với bot hoặc thêm bot vào nhóm.'
+        message: `Telegram API error (${teleData.error_code}): ${teleData.description}`,
+        usedBotTokenSuffix: token.slice(-8),
+        usedChatId: chatId
       });
     }
   } catch (err) {

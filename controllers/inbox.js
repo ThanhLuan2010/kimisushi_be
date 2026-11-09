@@ -2,7 +2,7 @@ const Order = require('../models/Order');
 const Settings = require('../models/Settings');
 const { resolveAsapPickup } = require('../helpers/dateUtils');
 const { sendGmailNotification } = require('../helpers/mail');
-const { buildOrderInlineKeyboard, sendTelegramMessage } = require('../helpers/telegram');
+const { buildOrderInlineKeyboard, buildReservationInlineKeyboard, sendTelegramMessage, escapeHtml } = require('../helpers/telegram');
 const FcmToken = require('../models/FcmToken');
 const { sendPushNotification } = require('../helpers/firebase');
 
@@ -203,14 +203,27 @@ async function createInboxItem(req, res) {
         const fmtDate = resDate !== '-' ? resDate.split('-').reverse().join('.') : '-';
         const fmtTime = resTime !== '-' ? `${resTime} Uhr` : '-';
 
-        telegramMsg = `📅 NEUE TISCHRESERVIERUNG\n\n━━━━━━━━━━━━━━━\n🔖 Nr.: ${item.id || '-'}\n👤 Kunde: ${customerName}\n📞 Telefon: ${phone}\n📧 E-Mail: ${customerEmail}\n━━━━━━━━━━━━━━━\n🗓 Datum: ${fmtDate}\n🕒 Uhrzeit: ${fmtTime}\n👥 Personen: ${guests}\n━━━━━━━━━━━━━━━\n📝 Anmerkung: ${notes}\n━━━━━━━━━━━━━━━\nStatus: ${status.toUpperCase()}`;
+        telegramMsg = `📅 <b>NEUE TISCHRESERVIERUNG (ĐẶT BÀN MỚI)</b>\n\n` +
+          `━━━━━━━━━━━━━━━\n` +
+          `🔖 <b>Mã đặt bàn:</b> <code>${escapeHtml(item.id || '-')}</code>\n` +
+          `👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n` +
+          `📞 <b>Điện thoại:</b> ${escapeHtml(phone)}\n` +
+          `📧 <b>E-Mail:</b> ${escapeHtml(customerEmail)}\n` +
+          `━━━━━━━━━━━━━━━\n` +
+          `🗓 <b>Ngày:</b> ${escapeHtml(fmtDate)}\n` +
+          `🕒 <b>Giờ đến:</b> ${escapeHtml(fmtTime)}\n` +
+          `👥 <b>Số khách:</b> ${escapeHtml(guests)} Personen\n` +
+          `━━━━━━━━━━━━━━━\n` +
+          `📝 <b>Ghi chú:</b> ${escapeHtml(notes)}\n` +
+          `━━━━━━━━━━━━━━━\n` +
+          `<b>Status:</b> ${escapeHtml(status.toUpperCase())}`;
       } else {
-        const total = item.total ? `${item.total.replace('.', ',')} €` : '-';
-        const method = item.method === 'delivery' ? '🚴 Lieferung' : '🏪 Abholung';
+        const total = item.total ? (item.total.includes('€') ? item.total : `${item.total.replace('.', ',')} €`) : '-';
+        const method = item.method === 'delivery' ? '🚴 Lieferung (Giao hàng)' : '🏪 Abholung (Tự lấy)';
         const address = item.address && item.address !== 'Abholung / Vor Ort' ? item.address : '-';
         const orderDate = item.date || item.pickupDate || '-';
         const orderTime = item.time || item.pickupTime || item.pickupTimeDisplay || '-';
-        const timeDisplay = orderTime === 'asap' ? 'So schnell wie möglich' : orderTime;
+        const timeDisplay = orderTime === 'asap' ? 'So schnell wie möglich (Càng sớm càng tốt)' : orderTime;
 
         let itemsDetail = '';
         const src = item.items || item.cart || [];
@@ -218,16 +231,42 @@ async function createInboxItem(req, res) {
           src.forEach(i => {
             const qty = i.quantity || 1;
             const price = i.price ? ` — ${i.price}` : '';
-            itemsDetail += `\n  ▸ ${i.name || '-'} x${qty}${price}`;
+            itemsDetail += `\n  ▸ <b>${escapeHtml(i.name || '-')}</b> x${qty}${escapeHtml(price)}`;
+            if (i.note) {
+              itemsDetail += `\n    ↳ <i>${escapeHtml(i.note)}</i>`;
+            }
           });
         }
 
-        telegramMsg = `🍣 NEUE BESTELLUNG\n\n━━━━━━━━━━━━━━━\n📋 BESTELL-NR.: ${item.id || '-'}\n━━━━━━━━━━━━━━━\n👤 Kunde: ${customerName}\n📞 Telefon: ${phone}\n📧 E-Mail: ${customerEmail}\n━━━━━━━━━━━━━━━\n🏪 Bestellart: ${method}\n${item.method === 'delivery' ? `📍 Adresse: ${address}\n` : ''}━━━━━━━━━━━━━━━\n🗓 Datum: ${orderDate !== '-' ? orderDate.split('-').reverse().join('.') : '-'}\n🕒 Abholzeit: ${timeDisplay}\n━━━━━━━━━━━━━━━\n${item.notes && item.notes.trim() ? `⚠️ ALLERGIEN / WÜNSCHE:\n  ${item.notes.trim()}\n━━━━━━━━━━━━━━━\n` : ''}📋 Bestellte Artikel:${itemsDetail || '\n  (keine Details)'}\n━━━━━━━━━━━━━━━\n💰 Gesamtbetrag: ${total}\n━━━━━━━━━━━━━━━\nStatus: ${status.toUpperCase()}`;
+        telegramMsg = `🍣 <b>NEUE BESTELLUNG (ĐƠN ĐẶT MÓN MỚI)</b>\n\n` +
+          `━━━━━━━━━━━━━━━\n` +
+          `📋 <b>MÃ ĐƠN:</b> <code>${escapeHtml(item.id || '-')}</code>\n` +
+          `━━━━━━━━━━━━━━━\n` +
+          `👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n` +
+          `📞 <b>Điện thoại:</b> ${escapeHtml(phone)}\n` +
+          `📧 <b>E-Mail:</b> ${escapeHtml(customerEmail)}\n` +
+          `━━━━━━━━━━━━━━━\n` +
+          `🏪 <b>Hình thức:</b> ${method}\n` +
+          `${item.method === 'delivery' ? `📍 <b>Địa chỉ:</b> ${escapeHtml(address)}\n` : ''}` +
+          `━━━━━━━━━━━━━━━\n` +
+          `🗓 <b>Ngày:</b> ${escapeHtml(orderDate !== '-' ? orderDate.split('-').reverse().join('.') : '-')}\n` +
+          `🕒 <b>Thời gian yêu cầu:</b> ${escapeHtml(timeDisplay)}\n` +
+          `━━━━━━━━━━━━━━━\n` +
+          `${item.notes && item.notes.trim() ? `⚠️ <b>GHI CHÚ / ALLERGIEN:</b>\n  <i>${escapeHtml(item.notes.trim())}</i>\n━━━━━━━━━━━━━━━\n` : ''}` +
+          `📋 <b>Món đã đặt:</b>${itemsDetail || '\n  (không có chi tiết)'}\n` +
+          `━━━━━━━━━━━━━━━\n` +
+          `💰 <b>TỔNG TIỀN:</b> <b>${escapeHtml(total)}</b>\n` +
+          `━━━━━━━━━━━━━━━\n` +
+          `<b>Status:</b> ${escapeHtml(status.toUpperCase())}`;
       }
 
-      // Only orders get inline action buttons
-      const replyMarkup = isReservation ? undefined : buildOrderInlineKeyboard(item.id);
-      sendTelegramMessage(telegramMsg, replyMarkup);
+      // Inline action buttons: Online orders get 15-20-25-30 min buttons, Reservations get confirm button
+      const replyMarkup = isReservation
+        ? buildReservationInlineKeyboard(item.id)
+        : buildOrderInlineKeyboard(item.id);
+
+      const settings = await getSettingsObj();
+      sendTelegramMessage(telegramMsg, replyMarkup, settings?.telegramBotToken, settings?.telegramChatId);
 
       // Send Firebase Push Notification
       const tokensDoc = await FcmToken.find({}, 'token');

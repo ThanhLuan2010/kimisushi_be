@@ -91,7 +91,7 @@ async function updateInboxStatus(req, res) {
       );
     }
 
-    if (isStatusChanged && !skipEmail) {
+    if (isStatusChanged && !skipEmail && order.method !== 'dine-in') {
       const { sendCustomerStatusEmail } = require('../helpers/mail');
       const settings = await getSettingsObj();
       const gmailCfg = {
@@ -169,7 +169,9 @@ async function createInboxItem(req, res) {
       { upsert: true, new: true }
     );
 
-    // Gmail notification
+    const isDineIn = item.method === 'dine-in' || item.isDineIn || Boolean(item.tableId);
+
+    // Gmail notification: chỉ gửi khi có đơn hàng online hoặc đặt bàn online qua web (KHÔNG gửi khi thanh toán bàn tại quán)
     const gmailCfg = {
       gmailEnabled: item.gmailEnabled || process.env.GMAIL_ENABLED === 'true',
       gmailUser: item.gmailUser || process.env.GMAIL_USER,
@@ -177,7 +179,7 @@ async function createInboxItem(req, res) {
       gmailNotifyEmail: item.gmailNotifyEmail || process.env.GMAIL_NOTIFY_EMAIL || process.env.GMAIL_USER
     };
 
-    if (isNewItem && gmailCfg.gmailEnabled && gmailCfg.gmailUser && gmailCfg.gmailPassword) {
+    if (isNewItem && !isDineIn && gmailCfg.gmailEnabled && gmailCfg.gmailUser && gmailCfg.gmailPassword) {
       try {
         await sendGmailNotification(item, gmailCfg);
       } catch (err) {
@@ -186,7 +188,7 @@ async function createInboxItem(req, res) {
     }
 
     // Customer Status Change email notification (For existing orders when status changes)
-    if (isStatusChanged) {
+    if (isStatusChanged && !isDineIn) {
       const { sendCustomerStatusEmail } = require('../helpers/mail');
       const settings = await getSettingsObj();
       const statusEmailCfg = {
@@ -203,7 +205,7 @@ async function createInboxItem(req, res) {
       }
     }
 
-    if (isNewItem && item.method !== 'dine-in') {
+    if (isNewItem && !isDineIn) {
       // Telegram notification
       const isReservation = item.type === 'reservation';
       const customerName = item.name || item.customerName || '-';
